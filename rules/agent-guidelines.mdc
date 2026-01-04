@@ -1,0 +1,174 @@
+---
+description: Frontend agent guidelines for autonomous operation with Beads, Graphite, and visual testing
+alwaysApply: true
+---
+
+# Frontend Agent Operation Guidelines
+
+## CRITICAL SAFETY RULES - NEVER VIOLATE
+
+### Production Database Protection
+
+**NEVER execute commands that could affect production databases.**
+
+### If Uncertain
+
+When in doubt: **STOP** and ask for confirmation.
+
+---
+
+## MANDATORY: Task Completion Workflow with Stacked PRs
+
+**EVERY task MUST end with a commit and draft PR.**
+
+### BRANCH SETUP (DONE BY ORCHESTRATOR)
+
+The orchestrator has ALREADY:
+1. Checked out the correct parent branch
+2. Created your task branch using `gt create`
+3. Started you on the correct, Graphite-tracked branch
+
+**You are already on the correct branch. Do NOT create branches.**
+
+### Step 1: Make Your Changes
+
+Edit files, add features, fix bugs - whatever the task requires.
+
+### Step 2: Run Typecheck
+
+```bash
+pnpm run typecheck
+```
+
+### Step 3: Commit with Graphite
+
+```bash
+gt modify --no-interactive -a -m "[<task-id>] <description>"
+```
+
+### Step 4: Submit as Draft PR
+
+```bash
+gt submit --no-interactive --draft --no-edit
+```
+
+### Step 5: Do NOT Close the Bead
+
+The orchestrator will close the bead after verifying the PR was created.
+
+---
+
+## CRITICAL Rules - Git/Graphite Commands
+
+### FORBIDDEN (will break the workflow):
+| Command | Reason |
+|---------|--------|
+| `git commit` | Use `gt modify` instead |
+| `git push` | Use `gt submit` instead |
+| `git checkout` | Stay on current branch |
+| `git branch` | Branch already created |
+| `gt create` | Branch already created by orchestrator |
+| `bd close` | Orchestrator handles this |
+
+### REQUIRED:
+| Action | Command |
+|--------|---------|
+| Commit changes | `gt modify --no-interactive -a -m "[<task-id>] <description>"` |
+| Push and create PR | `gt submit --no-interactive --draft --no-edit` |
+| Validate code | `pnpm run typecheck` |
+
+---
+
+## Visual Testing with Playwright
+
+For UI changes, a dev server is running at `http://localhost:8081`.
+
+Use Playwright MCP to verify your work:
+
+```bash
+# Navigate to the page with your changes
+playwright_navigate url="http://localhost:8081/path/to/page"
+
+# Take a screenshot
+playwright_screenshot name="my-changes"
+
+# Test interactions
+playwright_click selector="button.submit"
+playwright_hover selector=".menu-item"
+```
+
+If a Figma link is provided in the task:
+1. Use `figma MCP` to get the design screenshot
+2. Use `playwright_screenshot` to capture your implementation
+3. Compare and note any discrepancies
+
+---
+
+## Design Implementation
+
+When implementing UI:
+1. Query Figma MCP for design specs if a Figma link is provided
+2. Map Figma colors to heygen-design semantic tokens:
+   - Use `tw-bg-fill-general` not `tw-bg-white`
+   - Use `tw-text-textTitle` not `tw-text-black`
+3. Always use components from `@pacific/heygen-design`
+
+---
+
+## CRITICAL: Code Style Rules
+
+### NEVER Use Inline Styles
+**THIS WILL FAIL THE BUILD.** This repo has ESLint rules that forbid inline styles.
+
+❌ **FORBIDDEN** - Will cause build failure:
+```tsx
+<div style={{ backgroundColor: '#f7f8fa' }}>
+<div style={{ borderRadius: '12px', padding: '24px' }}>
+```
+
+✅ **CORRECT** - Use Tailwind classes:
+```tsx
+<div className="tw-bg-fill-block">
+<div className="tw-rounded-xl tw-p-6">
+```
+
+### Color Mappings (Figma → Tailwind)
+| Figma Color | Tailwind Class |
+|-------------|----------------|
+| `#f7f8fa` / `fillblock` | `tw-bg-fill-block` |
+| `#232833` / `texttitle` | `tw-text-textTitle` |
+| `#818999` / `textsupport` | `tw-text-textSupport` |
+| `white` / `fillgeneral` | `tw-bg-fill-general` |
+| `#00c4ff` / primary cyan | `tw-bg-ux-primary` |
+
+### Border Radius Mappings
+| Figma | Tailwind |
+|-------|----------|
+| 8px | `tw-rounded-lg` |
+| 12px | `tw-rounded-xl` |
+| 16px | `tw-rounded-2xl` |
+| 100px (pill) | `tw-rounded-full` |
+
+### Spacing Mappings
+| Figma | Tailwind |
+|-------|----------|
+| 8px | `tw-p-2` / `tw-gap-2` |
+| 12px | `tw-p-3` / `tw-gap-3` |
+| 16px | `tw-p-4` / `tw-gap-4` |
+| 24px | `tw-p-6` / `tw-gap-6` |
+| 32px | `tw-p-8` / `tw-gap-8` |
+
+---
+
+## Stealth Mode - Files to NEVER Commit
+
+**NEVER stage or commit these files/directories:**
+- `.beads/` - Local task tracking
+- `.claude/` - Local Claude settings  
+- `.cursor/rules/personal/` - Personal rules (including this file)
+
+Before any `git add`, explicitly exclude these:
+```bash
+git add -A
+git reset HEAD .beads/ .claude/ .cursor/rules/personal/ 2>/dev/null
+```

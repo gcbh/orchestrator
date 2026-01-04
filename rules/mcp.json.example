@@ -1,0 +1,29 @@
+{
+  "mcpServers": {
+    "beads": {
+      "command": "beads-mcp",
+      "env": {
+        "BEADS_WORKING_DIR": "/Users/geoffreyheath/workspaces/pacific",
+        "BEADS_ACTOR": "geoff-local"
+      }
+    },
+    "graphite": {
+      "command": "gt",
+      "args": ["mcp"]
+    },
+    "figma": {
+      "url": "https://mcp.figma.com/mcp"
+    },
+    "browser": {
+      "command": "npx",
+      "args": ["-y", "browser-mcp"]
+    },
+    "playwright": {
+      "command": "playwright-mcp-server",
+      "args": [],
+      "env": {
+        "PLAYWRIGHT_HEADLESS": "true"
+      }
+    }
+  }
+}

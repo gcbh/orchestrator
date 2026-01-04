@@ -1,0 +1,135 @@
+---
+description: How to debug issues with the autonomous Cursor agent (orchestrator)
+globs: []
+alwaysApply: false
+---
+
+# Debugging the Autonomous Agent
+
+This workspace runs an autonomous Cursor agent managed by an orchestrator. When the user asks about agent issues, blocked tasks, or runtime problems, follow this guide.
+
+## Quick Diagnostics
+
+**First, read the diagnostic snapshot:**
+```bash
+# Generate fresh snapshot
+~/.local/bin/agent-diag
+
+# Read it
+cat ~/.local/share/agent-diagnostics/snapshot.md
+```
+
+This file contains:
+- Agent process status
+- Current task being worked on
+- Blocked tasks with reasons
+- Recent log entries
+- Git/Graphite state
+
+## Key Locations
+
+| What | Path |
+|------|------|
+| Main repo (beads) | `/Users/geoffreyheath/workspaces/pacific` |
+| Worktree (code) | `/Users/geoffreyheath/workspaces/pacific-agent` |
+| Orchestrator script | `~/.local/bin/orchestrator-loop-v2.sh` |
+| Step implementations | `~/.local/lib/orchestrator/actions.sh` |
+| Agent log | `~/.local/log/fe-agent.log` |
+| Current task file | `/tmp/cursor-agent-current-task` |
+| Failed tasks | `/tmp/cursor-agent-failed-tasks` |
+| Lock file | `/tmp/cursor-agent.lock` |
+
+## Common Issues
+
+### Task Blocked: "untracked branch"
+**Cause:** Parent branch not tracked by Graphite
+**Fix:**
+```bash
+cd /Users/geoffreyheath/workspaces/pacific-agent
+gt track <parent-branch> --force
+bd update <task-id> --status open
+```
+
+### Task Blocked: "validation failed"
+**Cause:** Type errors exist in the codebase
+**Fix:**
+```bash
+cd /Users/geoffreyheath/workspaces/pacific-agent
+pnpm run typecheck  # See actual errors
+# Fix the errors
+bd update <task-id> --status open
+```
+
+### Task Blocked: "jq parse error"
+**Cause:** Log output polluting JSON
+**Fix:** Check that `_log()` in actions.sh outputs to `>&2` (stderr)
+
+### Task Stuck "in_progress"
+**Cause:** Agent crashed mid-task
+**Fix:**
+```bash
+bd update <task-id> --status open
+# Optionally clear failure count
+sed -i '' "/<task-id>/d" /tmp/cursor-agent-failed-tasks
+```
+
+### PR Not Created
+**Cause:** Graphite submit failed
+**Fix:**
+```bash
+cd /Users/geoffreyheath/workspaces/pacific-agent
+gt log --short  # Check state
+gt restack --no-interactive  # Fix divergence
+gt submit --no-interactive --draft --no-edit
+```
+
+### Agent Not Picking Up Tasks
+**Cause:** Stale lock file or crashed process
+**Fix:**
+```bash
+rm -f /tmp/cursor-agent.lock /tmp/cursor-agent-current-task
+launchctl unload ~/Library/LaunchAgents/com.cursor.agent.plist
+launchctl load ~/Library/LaunchAgents/com.cursor.agent.plist
+```
+
+## Orchestrator State Machine
+
+```
+PICK_TASK → RECONCILE → PREPARE_BRANCH → VALIDATE_BASELINE → RUN_IMPLEMENTER → VALIDATE_POST → SUBMIT_PR → CLOSE_BEAD
+```
+
+Each step outputs JSON to stdout. Failures are classified and may trigger retries or blocking.
+
+## Beads Commands
+
+```bash
+bd ready           # Tasks ready to work
+bd blocked         # Blocked tasks with reasons
+bd list            # All tasks
+bd show <id>       # Task details
+bd update <id> --status open   # Unblock a task
+bd stats           # Overview
+```
+
+## Graphite Commands
+
+```bash
+gt log --short     # Show branch stack
+gt checkout <branch> --no-interactive
+gt track <branch> --force
+gt restack --no-interactive
+gt submit --no-interactive --draft --no-edit
+```
+
+## Viewing Logs
+
+```bash
+# Follow live
+tail -f ~/.local/log/fe-agent.log
+
+# Search for errors
+grep -iE "(error|fail|block)" ~/.local/log/fe-agent.log | tail -50
+
+# Last task attempt
+grep -A 50 "Task:" ~/.local/log/fe-agent.log | tail -60
+```
