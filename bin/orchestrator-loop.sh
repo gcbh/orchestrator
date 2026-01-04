@@ -92,6 +92,19 @@ if [ "$ORCH_FLAVOR" = "fe" ]; then
   [ -d "$HOME/.volta/bin" ] && export PATH="$HOME/.volta/bin:$PATH"
   [ -f "$HOME/.nvm/nvm.sh" ] && source "$HOME/.nvm/nvm.sh" || true
   [ -d "$HOME/Library/pnpm" ] && export PATH="$HOME/Library/pnpm:$PATH"
+elif [ "$ORCH_FLAVOR" = "ios" ]; then
+  VALIDATE_CMD="${VALIDATE_CMD:-xcodebuild build -scheme \${XCODE_SCHEME:-App} -configuration Debug -destination 'platform=iOS Simulator,name=iPhone 15' 2>&1}"
+  ENABLE_ESLINT_FIX="${ENABLE_ESLINT_FIX:-0}"
+  # Ensure Xcode command-line tools are in PATH
+  if command -v xcrun >/dev/null 2>&1; then
+    export DEVELOPER_DIR="$(xcode-select -p)"
+    export PATH="/usr/bin:$PATH"
+  else
+    echo "WARNING: Xcode command-line tools not found. Install with: xcode-select --install"
+  fi
+  # iOS simulator environment
+  export XCODE_SCHEME="${XCODE_SCHEME:-App}"
+  export SIMULATOR_DEVICE="${SIMULATOR_DEVICE:-iPhone 15}"
 else
   VALIDATE_CMD="${VALIDATE_CMD:-make fmt}"
   ENABLE_ESLINT_FIX="${ENABLE_ESLINT_FIX:-0}"

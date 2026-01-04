@@ -426,7 +426,22 @@ load_validation_preset() {
       TEST_AFFECTED_CMD="pytest --last-failed 2>&1"
       AUTO_FIX_LINT=1
       ;;
-      
+
+    ios|swift|mobile)
+      VALIDATION_STAGES="lint typecheck test"
+      # SwiftLint for code quality
+      LINT_CMD="swiftlint lint --reporter json 2>&1 || echo '{\"violations\":[]}'"
+      LINT_FIX_CMD="swiftlint --fix --format 2>&1 || true"
+      # Xcodebuild for compilation/type checking
+      TYPECHECK_CMD="xcodebuild build -scheme \${XCODE_SCHEME:-App} -configuration Debug -destination 'platform=iOS Simulator,name=\${SIMULATOR_DEVICE:-iPhone 15}' 2>&1"
+      # XCTest for unit tests
+      TEST_CMD="xcodebuild test -scheme \${XCODE_SCHEME:-App} -configuration Debug -destination 'platform=iOS Simulator,name=\${SIMULATOR_DEVICE:-iPhone 15}' 2>&1"
+      TEST_AFFECTED_CMD="xcodebuild test -scheme \${XCODE_SCHEME:-App} -configuration Debug -destination 'platform=iOS Simulator,name=\${SIMULATOR_DEVICE:-iPhone 15}' -only-testing:\${TEST_TARGET:-AppTests} 2>&1"
+      AUTO_FIX_LINT=1
+      # iOS simulator UI checks (optional, requires custom MCP)
+      ENABLE_UI_SNAPSHOT_TESTS="${ENABLE_UI_SNAPSHOT_TESTS:-0}"
+      ;;
+
     minimal)
       VALIDATION_STAGES="typecheck"
       TYPECHECK_CMD="${VALIDATE_CMD:-echo 'No typecheck configured'}"
