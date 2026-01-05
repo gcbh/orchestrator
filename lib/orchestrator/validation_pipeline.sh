@@ -137,19 +137,23 @@ stage_typecheck() {
 
 stage_test() {
   _vlog "=== STAGE: TEST ==="
-  
+
   if [ -z "$TEST_CMD" ] && [ -z "$TEST_AFFECTED_CMD" ]; then
+    if [ "${REQUIRE_TESTS:-0}" = "1" ]; then
+      _vlog "ERROR: Tests are required but no TEST_CMD configured"
+      return 1
+    fi
     _vlog "No TEST_CMD configured, skipping"
     return 0
   fi
-  
+
   local test_cmd="$TEST_CMD"
-  
+
   # Use affected-only tests if enabled and available
   if [ "$RUN_AFFECTED_TESTS_ONLY" = "1" ] && [ -n "$TEST_AFFECTED_CMD" ]; then
     local changed_files
     changed_files="$(_get_changed_files)"
-    
+
     if [ -n "$changed_files" ]; then
       _vlog "Running tests for affected files only"
       test_cmd="$TEST_AFFECTED_CMD"
@@ -158,22 +162,51 @@ stage_test() {
       return 0
     fi
   fi
-  
+
   local output code
   output="$(timeout "$TEST_TIMEOUT_SECS" bash -c "$test_cmd" 2>&1)"
   code=$?
-  
+
+  # Extract test statistics if available
+  local test_count pass_count fail_count
+  test_count=$(echo "$output" | grep -oE '[0-9]+ tests?' | head -1 | grep -oE '[0-9]+' || echo "")
+  pass_count=$(echo "$output" | grep -oE '[0-9]+ passed' | grep -oE '[0-9]+' || echo "")
+  fail_count=$(echo "$output" | grep -oE '[0-9]+ failed' | grep -oE '[0-9]+' || echo "")
+
   if [ "$code" -eq 0 ]; then
     _vlog "Tests passed ✓"
+    [ -n "$test_count" ] && _vlog "  Total: $test_count tests"
+    [ -n "$pass_count" ] && _vlog "  Passed: $pass_count"
+
+    # Check coverage if COVERAGE_CMD is set
+    if [ -n "${COVERAGE_CMD:-}" ]; then
+      _vlog "Checking test coverage..."
+      local coverage_output coverage_pct
+      coverage_output="$(bash -c "$COVERAGE_CMD" 2>&1)"
+      coverage_pct=$(echo "$coverage_output" | grep -oE '[0-9]+%' | head -1 || echo "unknown")
+      _vlog "  Coverage: $coverage_pct"
+
+      # Fail if below minimum coverage threshold
+      if [ -n "${MIN_COVERAGE:-}" ]; then
+        local coverage_num="${coverage_pct%\%}"
+        if [ -n "$coverage_num" ] && [ "$coverage_num" -lt "$MIN_COVERAGE" ]; then
+          _vlog "ERROR: Coverage $coverage_pct below minimum ${MIN_COVERAGE}%"
+          echo "$coverage_output" | tail -20 | tee -a "$VALIDATION_LOG" >&2
+          return 1
+        fi
+      fi
+    fi
+
     return 0
   fi
-  
+
   if [ "$code" -eq 124 ]; then
     _vlog "Tests timed out after ${TEST_TIMEOUT_SECS}s"
   else
     _vlog "Tests failed:"
+    [ -n "$fail_count" ] && _vlog "  Failed: $fail_count"
   fi
-  
+
   echo "$output" | tail -100 | tee -a "$VALIDATION_LOG" >&2
   echo "$output"
   return 1
@@ -424,6 +457,9 @@ load_validation_preset() {
       TYPECHECK_CMD="make typecheck 2>&1 || mypy src/ 2>&1"
       TEST_CMD="make test"
       TEST_AFFECTED_CMD="pytest --last-failed 2>&1"
+      COVERAGE_CMD="pytest --cov=src --cov-report=term-missing 2>&1 | grep -E 'TOTAL.*[0-9]+%' || echo 'Coverage: unknown'"
+      MIN_COVERAGE="${MIN_COVERAGE:-70}"
+      REQUIRE_TESTS="${REQUIRE_TESTS:-1}"
       AUTO_FIX_LINT=1
       ;;
 
@@ -437,6 +473,10 @@ load_validation_preset() {
       # XCTest for unit tests
       TEST_CMD="xcodebuild test -scheme \${XCODE_SCHEME:-App} -configuration Debug -destination 'platform=iOS Simulator,name=\${SIMULATOR_DEVICE:-iPhone 15}' 2>&1"
       TEST_AFFECTED_CMD="xcodebuild test -scheme \${XCODE_SCHEME:-App} -configuration Debug -destination 'platform=iOS Simulator,name=\${SIMULATOR_DEVICE:-iPhone 15}' -only-testing:\${TEST_TARGET:-AppTests} 2>&1"
+      # Code coverage via xcodebuild (requires enabling coverage in scheme)
+      COVERAGE_CMD="xcodebuild test -scheme \${XCODE_SCHEME:-App} -configuration Debug -destination 'platform=iOS Simulator,name=\${SIMULATOR_DEVICE:-iPhone 15}' -enableCodeCoverage YES 2>&1 | grep -E 'Test Coverage:.*[0-9]+%' || echo 'Coverage: unknown'"
+      MIN_COVERAGE="${MIN_COVERAGE:-60}"
+      REQUIRE_TESTS="${REQUIRE_TESTS:-1}"
       AUTO_FIX_LINT=1
       # iOS simulator UI checks (optional, requires custom MCP)
       ENABLE_UI_SNAPSHOT_TESTS="${ENABLE_UI_SNAPSHOT_TESTS:-0}"
