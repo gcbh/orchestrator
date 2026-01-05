@@ -28,8 +28,8 @@ ORCH_FLAVOR="${ORCH_FLAVOR:-be}"          # fe|be
 IMPLEMENTER_MODEL="${IMPLEMENTER_MODEL:-opus-4.5-thinking}"
 CHECKER_MODEL="${CHECKER_MODEL:-gemini-3-flash}"
 
-# CLI Selection: cursor | claude-code
-AGENT_CLI="${AGENT_CLI:-cursor}"
+# CLI Selection: cursor | claude-code | auto
+AGENT_CLI="${AGENT_CLI:-auto}"
 
 # Legacy support - if AGENT_BIN is set, use cursor mode
 AGENT_BIN="${AGENT_BIN:-}"
