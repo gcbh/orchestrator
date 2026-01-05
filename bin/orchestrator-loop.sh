@@ -93,7 +93,7 @@ if [ "$ORCH_FLAVOR" = "fe" ]; then
   [ -f "$HOME/.nvm/nvm.sh" ] && source "$HOME/.nvm/nvm.sh" || true
   [ -d "$HOME/Library/pnpm" ] && export PATH="$HOME/Library/pnpm:$PATH"
 elif [ "$ORCH_FLAVOR" = "ios" ]; then
-  VALIDATE_CMD="${VALIDATE_CMD:-xcodebuild build -scheme \${XCODE_SCHEME:-App} -configuration Debug -destination 'platform=iOS Simulator,name=iPhone 15' 2>&1}"
+  VALIDATE_CMD="${VALIDATE_CMD:-xcodebuild build -scheme \${XCODE_SCHEME:-App} -configuration Debug -destination 'platform=iOS Simulator,name=iPhone 15'}"
   ENABLE_ESLINT_FIX="${ENABLE_ESLINT_FIX:-0}"
   # Ensure Xcode command-line tools are in PATH
   if command -v xcrun >/dev/null 2>&1; then
