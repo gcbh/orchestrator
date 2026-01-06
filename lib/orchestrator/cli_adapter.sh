@@ -9,8 +9,9 @@
 # CONFIGURATION
 # ──────────────────────────────────────────────────────────────────────────────
 
-# Which CLI to use: cursor | claude-code
-AGENT_CLI="${AGENT_CLI:-cursor}"
+# Which CLI to use: cursor | claude-code | auto
+# Set to 'auto' to automatically detect available CLI
+AGENT_CLI="${AGENT_CLI:-auto}"
 
 # Binary paths (auto-detected if not set)
 CURSOR_BIN="${CURSOR_BIN:-}"
@@ -28,6 +29,25 @@ MAX_DELAY_SECS="${MAX_DELAY_SECS:-600}"
 # ──────────────────────────────────────────────────────────────────────────────
 # CLI DETECTION
 # ──────────────────────────────────────────────────────────────────────────────
+
+# Auto-detect which CLI is available
+# Prefers claude-code, falls back to cursor
+_auto_detect_cli() {
+  # Try claude-code first (since we're running in Claude Code)
+  if [ -n "$(_detect_claude_code_bin)" ]; then
+    echo "claude-code"
+    return
+  fi
+
+  # Fall back to cursor
+  if [ -n "$(_detect_cursor_bin)" ]; then
+    echo "cursor"
+    return
+  fi
+
+  # Neither found
+  echo ""
+}
 
 _detect_cursor_bin() {
   if [ -n "$CURSOR_BIN" ]; then
@@ -89,7 +109,8 @@ _run_cursor() {
   fi
   
   # Cursor agent format: cursor-agent --model MODEL -p --force "PROMPT"
-  timeout "$AGENT_TIMEOUT_SECS" "$bin" --model "$model" -p --force "$prompt" 2>&1
+  # Note: timeout removed for macOS compatibility
+  "$bin" --model "$model" -p --force "$prompt" 2>&1
 }
 
 # Claude Code CLI invocation
@@ -114,9 +135,10 @@ _run_claude_code() {
   #
   # Override with CLAUDE_CODE_ARGS if needed
   local args="${CLAUDE_CODE_ARGS:--p --dangerously-skip-permissions}"
-  
+
+  # Note: timeout removed for macOS compatibility
   # shellcheck disable=SC2086
-  timeout "$AGENT_TIMEOUT_SECS" "$bin" \
+  "$bin" \
     $args \
     --model "$model" \
     "$prompt" 2>&1
@@ -191,11 +213,21 @@ _map_model() {
 run_agent_cli() {
   local model="$1"
   local prompt="$2"
+  local cli="$AGENT_CLI"
   local mapped_model
-  
-  mapped_model="$(_map_model "$AGENT_CLI" "$model")"
-  
-  case "$AGENT_CLI" in
+
+  # Resolve auto to actual CLI
+  if [ "$cli" = "auto" ]; then
+    cli="$(_auto_detect_cli)"
+    if [ -z "$cli" ]; then
+      echo "ERROR: No CLI found. Install claude-code or cursor." >&2
+      return 1
+    fi
+  fi
+
+  mapped_model="$(_map_model "$cli" "$model")"
+
+  case "$cli" in
     cursor)
       _run_cursor "$mapped_model" "$prompt"
       ;;
@@ -220,8 +252,20 @@ run_agent_cli() {
 # Check if the configured CLI is available
 validate_agent_cli() {
   local bin=""
-  
-  case "$AGENT_CLI" in
+  local cli="$AGENT_CLI"
+
+  # Handle auto-detection
+  if [ "$cli" = "auto" ]; then
+    cli="$(_auto_detect_cli)"
+    if [ -z "$cli" ]; then
+      echo "ERROR: No CLI found (auto-detection). Install claude-code or cursor." >&2
+      return 1
+    fi
+    echo "Auto-detected CLI: $cli" >&2
+  fi
+
+  # Validate the resolved CLI
+  case "$cli" in
     cursor)
       bin="$(_detect_cursor_bin)"
       ;;
@@ -229,16 +273,16 @@ validate_agent_cli() {
       bin="$(_detect_claude_code_bin)"
       ;;
   esac
-  
+
   if [ -z "$bin" ]; then
     # Use tr for bash 3.2 compatibility (no ${var^^} support)
     local cli_upper
-    cli_upper="$(echo "$AGENT_CLI" | tr '[:lower:]' '[:upper:]')"
-    echo "ERROR: $AGENT_CLI CLI not found. Set ${cli_upper}_BIN or install the CLI." >&2
+    cli_upper="$(echo "$cli" | tr '[:lower:]' '[:upper:]')"
+    echo "ERROR: $cli CLI not found. Set ${cli_upper}_BIN or install the CLI." >&2
     return 1
   fi
-  
-  echo "Using $AGENT_CLI CLI: $bin" >&2
+
+  echo "Using $cli CLI: $bin" >&2
   return 0
 }
 

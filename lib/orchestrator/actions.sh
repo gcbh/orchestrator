@@ -281,7 +281,8 @@ _run_agent_with_retries() {
   while [ "$attempt" -lt "$MAX_AGENT_RETRIES" ]; do
     _log "Agent attempt $((attempt+1))/$MAX_AGENT_RETRIES (model=$model)"
     set +e
-    out="$(timeout "$AGENT_TIMEOUT_SECS" "$AGENT_BIN" --model "$model" -p --force "$prompt" 2>&1)"
+    # Note: timeout removed for macOS compatibility
+    out="$("$AGENT_BIN" --model "$model" -p --force "$prompt" 2>&1)"
     code=$?
     set -e
 
