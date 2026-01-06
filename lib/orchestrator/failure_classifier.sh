@@ -267,7 +267,8 @@ classify_failure() {
   
   local raw_output
   set +e
-  raw_output="$(timeout "$CLASSIFIER_TIMEOUT" "$AGENT_BIN" --model "$CLASSIFIER_MODEL" -p --force "$prompt" 2>&1)"
+  # Note: timeout removed for macOS compatibility
+  raw_output="$("$AGENT_BIN" --model "$CLASSIFIER_MODEL" -p --force "$prompt" 2>&1)"
   local agent_exit=$?
   set -e
   

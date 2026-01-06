@@ -109,7 +109,8 @@ _run_cursor() {
   fi
   
   # Cursor agent format: cursor-agent --model MODEL -p --force "PROMPT"
-  timeout "$AGENT_TIMEOUT_SECS" "$bin" --model "$model" -p --force "$prompt" 2>&1
+  # Note: timeout removed for macOS compatibility
+  "$bin" --model "$model" -p --force "$prompt" 2>&1
 }
 
 # Claude Code CLI invocation
@@ -134,9 +135,10 @@ _run_claude_code() {
   #
   # Override with CLAUDE_CODE_ARGS if needed
   local args="${CLAUDE_CODE_ARGS:--p --dangerously-skip-permissions}"
-  
+
+  # Note: timeout removed for macOS compatibility
   # shellcheck disable=SC2086
-  timeout "$AGENT_TIMEOUT_SECS" "$bin" \
+  "$bin" \
     $args \
     --model "$model" \
     "$prompt" 2>&1

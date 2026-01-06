@@ -359,7 +359,8 @@ run_reviewer_agent() {
   local review_output
   if type run_agent_cli >/dev/null 2>&1; then
     _rlog "Invoking reviewer agent..."
-    review_output="$(timeout "$REVIEWER_TIMEOUT_SECS" run_agent_cli "$REVIEWER_MODEL" "$prompt" 2>/dev/null)"
+    # Note: timeout removed for macOS compatibility
+    review_output="$(run_agent_cli "$REVIEWER_MODEL" "$prompt" 2>/dev/null)"
   else
     _rlog "ERROR: CLI adapter not available"
     echo '{"approved":false,"error":"CLI adapter not available"}'

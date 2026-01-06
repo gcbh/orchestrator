@@ -542,9 +542,12 @@ task_has_pr() {
 run_agent_with_retries() {
   local model="$1"
   local prompt="$2"
+  log "DEBUG: run_agent_with_retries called with model=$model"
 
   # If CLI adapter is loaded, use it
+  log "DEBUG: Checking for run_agent_cli function..."
   if type run_agent_cli >/dev/null 2>&1; then
+    log "DEBUG: run_agent_cli found, using CLI adapter"
     # Prepend CLI-specific prompt prefix if available
     local prefix=""
     if type get_cli_prompt_prefix >/dev/null 2>&1; then
@@ -556,12 +559,15 @@ run_agent_with_retries() {
     local delay="$RETRY_DELAY_SECS"
     local out="" code=0
 
+    log "DEBUG: Entering retry loop, MAX_AGENT_RETRIES=$MAX_AGENT_RETRIES"
     while [ "$attempt" -lt "$MAX_AGENT_RETRIES" ]; do
       log "Agent attempt $((attempt+1))/$MAX_AGENT_RETRIES (cli=$AGENT_CLI, model=$model)"
+      log "DEBUG: About to call run_agent_cli..."
       set +e
       out="$(run_agent_cli "$model" "$full_prompt")"
       code=$?
       set -e
+      log "DEBUG: run_agent_cli returned with code=$code, output length=${#out}"
 
       if [ "$code" -eq 0 ]; then
         printf "%s" "$out"
@@ -839,16 +845,25 @@ while true; do
     sync_worktree || log "Periodic sync failed (will retry)"
   fi
 
+  log "DEBUG: Main loop iteration starting"
   cd "$EXEC_REPO" || { log "ERROR: cannot cd to EXEC_REPO=$EXEC_REPO"; sleep "$SLEEP_SECS"; continue; }
+  log "DEBUG: In EXEC_REPO=$EXEC_REPO"
 
+  log "DEBUG: Acquiring lock..."
   if ! acquire_lock_or_wait; then
+    log "DEBUG: Failed to acquire lock, sleeping"
     sleep "$SLEEP_SECS"
     continue
   fi
+  log "DEBUG: Lock acquired"
 
+  log "DEBUG: Fetching from origin..."
   git fetch origin --quiet || true
+  log "DEBUG: Fetch complete"
 
+  log "DEBUG: Calling bd_ready_next_task..."
   TASK="$(bd_ready_next_task)"
+  log "DEBUG: bd_ready_next_task returned: TASK=$TASK"
   if [ -z "$TASK" ] || [ "$TASK" = "null" ]; then
     log "No tasks available"
     rm -f "$LOCK_FILE"
@@ -856,6 +871,7 @@ while true; do
     sleep "$SLEEP_SECS"
     continue
   fi
+  log "DEBUG: Task selected: $TASK"
 
   if [ "$(fail_count "$TASK")" -ge "$MAX_COMMIT_FAILURES" ]; then
     log "Task $TASK exceeded failure threshold -> blocking"
@@ -999,8 +1015,10 @@ while true; do
 
   # Baseline validation with self-healing
   log "Baseline validation gate..."
+  log "DEBUG: About to run validation"
   BASELINE_VALID="false"
   if run_validate 2>&1 | tee /tmp/orch-validate.log; then
+    log "DEBUG: Validation passed"
     BASELINE_VALID="true"
   else
     log "Baseline validation failed - attempting self-heal..."
@@ -1024,11 +1042,13 @@ while true; do
     fi
 
   fi
-  
+
+  log "DEBUG: BASELINE_VALID=$BASELINE_VALID"
   if [ "$BASELINE_VALID" != "true" ]; then
+    log "DEBUG: Baseline validation failed, handling failure"
     record_infra_failure "baseline_validation_$TASK"
     fail_cnt=$(infra_failure_count)
-    
+
     if [ "$fail_cnt" -ge "$MAX_INFRA_FAILURES" ]; then
       # This is an infrastructure issue, not a task issue - don't block the task
       notify "Orchestrator: baseline validation failing repeatedly ($fail_cnt times). Infrastructure issue, not blocking task." "warning" "$TASK"
@@ -1037,7 +1057,7 @@ while true; do
       sleep $((SLEEP_SECS * 5))
       continue
     fi
-    
+
     tailmsg="$(tail -140 /tmp/orch-validate.log | tr '\n' ' ' | sed 's/  */ /g')"
     bd_update_blocked "$TASK" "Baseline validation failed (self-heal attempted). Tail: $tailmsg"
     rm -f "$CURRENT_TASK_FILE" "$LOCK_FILE"
@@ -1046,15 +1066,42 @@ while true; do
     continue
   fi
 
+  log "DEBUG: Baseline validation passed, preparing to run implementer"
   # Run implementer
   # Capture baseline HEAD to detect if cursor-agent commits directly
   BASELINE_HEAD="$(git rev-parse HEAD)"
   export BASELINE_HEAD
-  
+  log "DEBUG: BASELINE_HEAD=$BASELINE_HEAD"
+
   # Use desired_branch for new branches, EXISTING_BRANCH for existing ones
   CURRENT_BRANCH="${EXISTING_BRANCH:-$desired_branch}"
+  log "DEBUG: CURRENT_BRANCH=$CURRENT_BRANCH"
+  log "DEBUG: Building implementer prompt..."
   PROMPT="$(build_implementer_prompt "$TASK" "$TITLE" "$DETAILS" "$CURRENT_BRANCH")"
-  OUT="$(run_agent_with_retries "$IMPLEMENTER_MODEL" "$PROMPT" || true)"
+  log "DEBUG: Prompt length: ${#PROMPT} characters"
+
+  # Check if function exists
+  if ! type run_agent_with_retries >/dev/null 2>&1; then
+    log "ERROR: run_agent_with_retries function not found!"
+    bd_update_blocked "$TASK" "run_agent_with_retries function not found"
+    rm -f "$CURRENT_TASK_FILE" "$LOCK_FILE"
+    sleep "$SLEEP_SECS"
+    continue
+  fi
+  log "DEBUG: run_agent_with_retries function exists"
+
+  log "DEBUG: Invoking agent with model=$IMPLEMENTER_MODEL"
+  log "DEBUG: About to call: run_agent_with_retries \"$IMPLEMENTER_MODEL\" \"<prompt>\""
+  log "DEBUG: [BEFORE COMMAND SUBSTITUTION]"
+
+  # Try to call it directly without command substitution first
+  log "DEBUG: Testing direct call..."
+  run_agent_with_retries "$IMPLEMENTER_MODEL" "$PROMPT" > /tmp/agent-output.txt 2>&1 || true
+  log "DEBUG: Direct call completed, checking output..."
+  OUT="$(cat /tmp/agent-output.txt)"
+
+  log "DEBUG: [AFTER COMMAND SUBSTITUTION]"
+  log "DEBUG: Agent returned, output length: ${#OUT} characters"
 
   if agent_reported_blocked "$OUT"; then
     bd_update_blocked "$TASK" "$(echo "$OUT" | tail -120 | tr '\n' ' ' | sed 's/  */ /g')"
