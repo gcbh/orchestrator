@@ -355,12 +355,19 @@ run_reviewer_agent() {
       ;;
   esac
   
-  # Call reviewer agent
+  # Call reviewer agent with recovery
   local review_output
   if type run_agent_cli >/dev/null 2>&1; then
     _rlog "Invoking reviewer agent..."
-    # Note: timeout removed for macOS compatibility
-    review_output="$(run_agent_cli "$REVIEWER_MODEL" "$prompt" 2>/dev/null)"
+    # Use agent recovery if available for self-healing
+    if type run_with_recovery >/dev/null 2>&1; then
+      review_output="$(run_with_recovery "Code review with $REVIEWER_MODEL" \
+        "run_agent_cli '$REVIEWER_MODEL' \"\$prompt\"" \
+        "Reviewer agent invocation" 2>&1 || echo '{"approved":false,"error":"recovery failed"}')"
+    else
+      # Fallback: direct call (stderr visible for debugging)
+      review_output="$(run_agent_cli "$REVIEWER_MODEL" "$prompt" 2>&1 || echo '{"approved":false,"error":"agent call failed"}')"
+    fi
   else
     _rlog "ERROR: CLI adapter not available"
     echo '{"approved":false,"error":"CLI adapter not available"}'

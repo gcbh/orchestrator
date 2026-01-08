@@ -18,7 +18,7 @@
 #   ORCH_FLAVOR=fe MAIN_REPO=/path/to/repo EXEC_REPO=/path/to/worktree ./orchestrator-loop.sh
 #   ORCH_FLAVOR=be ./orchestrator-loop.sh
 
-set -euo pipefail
+set -uo pipefail  # Removed -e to allow agent recovery to handle errors
 
 # ──────────────────────────────────────────────────────────────────────────────
 # CONFIG
@@ -43,6 +43,11 @@ fi
 # Source reviewer agent for clean review step
 if [ -f "$LIB_DIR/reviewer_agent.sh" ]; then
   source "$LIB_DIR/reviewer_agent.sh"
+fi
+
+# Source agent recovery for self-healing
+if [ -f "$LIB_DIR/agent_recovery.sh" ]; then
+  source "$LIB_DIR/agent_recovery.sh"
 fi
 
 # MAIN_REPO: where bd runs (canonical checkout)
