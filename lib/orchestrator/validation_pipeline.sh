@@ -294,6 +294,85 @@ stage_self_review() {
 }
 
 # ──────────────────────────────────────────────────────────────────────────────
+# STAGE: UI VALIDATION (iOS Simulator MCP)
+# ──────────────────────────────────────────────────────────────────────────────
+
+stage_ui_validation() {
+  _vlog "=== STAGE: UI VALIDATION ==="
+
+  if [ "${ENABLE_UI_VALIDATION:-0}" != "1" ]; then
+    _vlog "UI validation disabled, skipping"
+    return 0
+  fi
+
+  # Check if iOS simulator helpers are available
+  if ! type ios_sim_check_deps >/dev/null 2>&1; then
+    _vlog "iOS simulator helpers not loaded, skipping UI validation"
+    return 0
+  fi
+
+  # Check dependencies
+  if ! ios_sim_check_deps 2>/dev/null; then
+    _vlog "WARN: iOS simulator dependencies not met, skipping UI validation"
+    return 0
+  fi
+
+  # Boot simulator if needed
+  _vlog "Ensuring simulator is booted..."
+  if ! ios_sim_boot 2>/dev/null; then
+    _vlog "ERROR: Failed to boot simulator"
+    return 1
+  fi
+
+  # Install app if path provided
+  if [ -n "${IOS_APP_PATH:-}" ] && [ -d "$IOS_APP_PATH" ]; then
+    _vlog "Installing app from $IOS_APP_PATH..."
+    if ! ios_sim_install_app "$IOS_APP_PATH" 2>/dev/null; then
+      _vlog "ERROR: Failed to install app"
+      return 1
+    fi
+  fi
+
+  # Launch app if bundle ID provided
+  if [ -n "${IOS_BUNDLE_ID:-}" ]; then
+    _vlog "Launching app $IOS_BUNDLE_ID..."
+    if ! ios_sim_launch_app "$IOS_BUNDLE_ID" "" "true" 2>/dev/null; then
+      _vlog "ERROR: Failed to launch app"
+      return 1
+    fi
+    sleep 2  # Allow app to render
+  fi
+
+  # Take verification screenshot
+  local screenshot
+  screenshot=$(ios_sim_screenshot 2>/dev/null)
+  if [ -n "$screenshot" ]; then
+    _vlog "Verification screenshot: $screenshot"
+  fi
+
+  # Run UI flow if specified
+  if [ -n "${IOS_UI_FLOW:-}" ]; then
+    _vlog "Running UI flow: $IOS_UI_FLOW"
+    if ! ios_sim_run_ui_flow "$IOS_UI_FLOW" "${IOS_BUNDLE_ID:-}" 2>/dev/null; then
+      _vlog "ERROR: UI flow failed"
+      return 1
+    fi
+  fi
+
+  # Compare with baseline screenshot if provided
+  if [ -n "${IOS_BASELINE_SCREENSHOT:-}" ] && [ -f "$IOS_BASELINE_SCREENSHOT" ]; then
+    _vlog "Comparing with baseline screenshot..."
+    if ! ios_sim_compare_screenshots "$IOS_BASELINE_SCREENSHOT" "$screenshot" 2>/dev/null; then
+      _vlog "ERROR: Visual regression detected"
+      return 1
+    fi
+  fi
+
+  _vlog "UI validation passed"
+  return 0
+}
+
+# ──────────────────────────────────────────────────────────────────────────────
 # PIPELINE RUNNER
 # ──────────────────────────────────────────────────────────────────────────────
 
@@ -328,6 +407,9 @@ run_validation_pipeline() {
         ;;
       review|self-review)
         stage_output="$(stage_self_review "$task" 2>&1)" || stage_passed=false
+        ;;
+      ui|ui-validation)
+        stage_output="$(stage_ui_validation 2>&1)" || stage_passed=false
         ;;
       *)
         _vlog "Unknown stage: $stage"
@@ -478,8 +560,14 @@ load_validation_preset() {
       MIN_COVERAGE="${MIN_COVERAGE:-60}"
       REQUIRE_TESTS="${REQUIRE_TESTS:-1}"
       AUTO_FIX_LINT=1
-      # iOS simulator UI checks (optional, requires custom MCP)
-      ENABLE_UI_SNAPSHOT_TESTS="${ENABLE_UI_SNAPSHOT_TESTS:-0}"
+      # iOS simulator UI validation (via ios_simulator_mcp.sh)
+      ENABLE_UI_VALIDATION="${ENABLE_UI_VALIDATION:-0}"
+      IOS_BUNDLE_ID="${IOS_BUNDLE_ID:-}"
+      # Source iOS simulator helpers if available
+      if [ -f "${ORCH_LIB_DIR:-$(dirname "$0")}/ios_simulator_mcp.sh" ]; then
+        # shellcheck disable=SC1091
+        source "${ORCH_LIB_DIR:-$(dirname "$0")}/ios_simulator_mcp.sh"
+      fi
       ;;
 
     minimal)

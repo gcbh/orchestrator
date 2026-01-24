@@ -50,6 +50,11 @@ if [ -f "$LIB_DIR/agent_recovery.sh" ]; then
   source "$LIB_DIR/agent_recovery.sh"
 fi
 
+# Source self-healing module for automatic recovery
+if [ -f "$LIB_DIR/self_healing.sh" ]; then
+  source "$LIB_DIR/self_healing.sh"
+fi
+
 # MAIN_REPO: where bd runs (canonical checkout)
 # EXEC_REPO: where code+gt runs (worktree is fine; can equal MAIN_REPO)
 MAIN_REPO="${MAIN_REPO:-${BACKEND_REPO_PATH:-/home/ubuntu/workspaces/experiment-framework}}"
@@ -222,33 +227,52 @@ run_validate_quiet() {
 preflight_check() {
   log "Running pre-flight health check..."
   cd "$EXEC_REPO" || return 1
-  
+
+  # Run comprehensive self-healing check if available
+  if type heal_pre_task_check >/dev/null 2>&1; then
+    log "Running self-healing pre-task check..."
+    heal_pre_task_check || true
+  fi
+
   # Check if validation passes
   if run_validate_quiet; then
     log "Pre-flight check PASSED"
     clear_infra_failures
     return 0
   fi
-  
+
   log "Pre-flight check FAILED - attempting self-heal..."
-  
+
+  # Try comprehensive healing first
+  if type heal_dirty_state >/dev/null 2>&1; then
+    log "Running heal_dirty_state..."
+    heal_dirty_state "$BASE_BRANCH" || true
+  fi
+
   # Try syncing
   if sync_worktree && run_validate_quiet; then
     log "Self-heal successful after sync"
     clear_infra_failures
     return 0
   fi
-  
+
+  # Last resort: heal blocked tasks so they can be retried
+  if type heal_blocked_tasks >/dev/null 2>&1; then
+    log "Unblocking infrastructure-blocked tasks for retry..."
+    cd "$MAIN_REPO" && heal_blocked_tasks || true
+    cd "$EXEC_REPO"
+  fi
+
   record_infra_failure "preflight_validation_failed"
   local fail_count
   fail_count=$(infra_failure_count)
-  
+
   if [ "$fail_count" -ge "$MAX_INFRA_FAILURES" ]; then
     notify "Orchestrator paused: $fail_count infrastructure failures in last hour. Manual intervention required." "error" ""
     log "ERROR: Too many infrastructure failures ($fail_count). Pausing for extended sleep."
     return 2  # Signal to pause
   fi
-  
+
   log "Pre-flight check failed (attempt $fail_count/$MAX_INFRA_FAILURES)"
   return 1
 }
