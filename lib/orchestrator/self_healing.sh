@@ -253,7 +253,7 @@ heal_blocked_tasks() {
 
   for task in $blocked_tasks; do
     local notes
-    notes=$(bd show "$task" --json 2>/dev/null | jq -r '.notes // ""' || true)
+    notes=$(bd show "$task" --json 2>/dev/null | jq -r '.[0].notes // ""' || true)
 
     # Check if blocked due to infrastructure issues (not code issues)
     if echo "$notes" | grep -qiE "checkout|branch|graphite|git|stash|merge conflict"; then

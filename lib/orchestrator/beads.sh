@@ -44,8 +44,8 @@ set_branch_ref() {
   
   # Get existing external_ref to preserve PR if set
   local existing
-  existing="$(cd "$main_repo" && bd show "$task" --json 2>/dev/null | jq -r '.external_ref // ""' || true)"
-  
+  existing="$(cd "$main_repo" && bd show "$task" --json 2>/dev/null | jq -r '.[0].external_ref // ""' || true)"
+
   local new_ref="branch:$branch"
   
   # If existing has pr:, preserve it
@@ -66,8 +66,8 @@ set_pr_ref() {
   
   # Get existing external_ref to preserve branch if set
   local existing
-  existing="$(cd "$main_repo" && bd show "$task" --json 2>/dev/null | jq -r '.external_ref // ""' || true)"
-  
+  existing="$(cd "$main_repo" && bd show "$task" --json 2>/dev/null | jq -r '.[0].external_ref // ""' || true)"
+
   local new_ref=""
   
   # If existing has branch:, preserve it
@@ -122,7 +122,7 @@ get_branch_ref() {
   local main_repo="${MAIN_REPO:-$(pwd)}"
   
   local ext_ref
-  ext_ref="$(cd "$main_repo" && bd show "$task" --json 2>/dev/null | jq -r '.external_ref // ""' || true)"
+  ext_ref="$(cd "$main_repo" && bd show "$task" --json 2>/dev/null | jq -r '.[0].external_ref // ""' || true)"
   echo "$ext_ref" | grep -oE 'branch:[^ ]+' | sed 's/^branch://' || true
 }
 
@@ -133,7 +133,7 @@ get_pr_ref() {
   local main_repo="${MAIN_REPO:-$(pwd)}"
   
   local ext_ref
-  ext_ref="$(cd "$main_repo" && bd show "$task" --json 2>/dev/null | jq -r '.external_ref // ""' || true)"
+  ext_ref="$(cd "$main_repo" && bd show "$task" --json 2>/dev/null | jq -r '.[0].external_ref // ""' || true)"
   echo "$ext_ref" | grep -oE 'pr:[0-9]+' | sed 's/^pr://' || true
 }
 
@@ -199,7 +199,7 @@ get_epic_base() {
   local main_repo="${MAIN_REPO:-$(pwd)}"
   
   local notes
-  notes="$(cd "$main_repo" && bd show "$epic" --json 2>/dev/null | jq -r '.notes // ""' || true)"
+  notes="$(cd "$main_repo" && bd show "$epic" --json 2>/dev/null | jq -r '.[0].notes // ""' || true)"
   echo "$notes" | grep -oE 'base:[^ ]+' | sed 's/^base://' || echo "master"
 }
 

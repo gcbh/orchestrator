@@ -43,7 +43,7 @@ reconcile_task_status() {
   local main_repo="${MAIN_REPO:-$(pwd)}"
   
   local status
-  status="$(cd "$main_repo" && bd show "$task" --json 2>/dev/null | jq -r '.status // "open"' || echo "open")"
+  status="$(cd "$main_repo" && bd show "$task" --json 2>/dev/null | jq -r '.[0].status // "open"' || echo "open")"
   
   case "$status" in
     closed)
@@ -51,7 +51,7 @@ reconcile_task_status() {
       ;;
     blocked)
       local notes
-      notes="$(cd "$main_repo" && bd show "$task" --json 2>/dev/null | jq -r '.notes // ""' || true)"
+      notes="$(cd "$main_repo" && bd show "$task" --json 2>/dev/null | jq -r '.[0].notes // ""' || true)"
       echo "{\"action\":\"skip\",\"reason\":\"Task is blocked: $notes\",\"data\":{}}"
       ;;
     *)
