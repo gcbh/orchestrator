@@ -428,9 +428,13 @@ worker_process_task() {
 
     git pull origin "$parent_branch" --rebase 2>/dev/null || true
 
-    # Create branch
-    if ! gt create "${GT_CREATE_ARGS[@]}" "$desired_branch" -m "[$task] WIP" 2>/dev/null; then
-      _wlog_task "$task" "ERROR: gt create failed"
+    # Create branch - try Graphite first, fall back to plain git
+    if command -v gt >/dev/null 2>&1 && gt create "${GT_CREATE_ARGS[@]}" "$desired_branch" -m "[$task] WIP" 2>/dev/null; then
+      _wlog_task "$task" "Branch created via Graphite"
+    elif git checkout -b "$desired_branch" 2>/dev/null; then
+      _wlog_task "$task" "Branch created via git (Graphite unavailable)"
+    else
+      _wlog_task "$task" "ERROR: Failed to create branch $desired_branch"
       queue_mark_blocked "$task" "Failed to create branch $desired_branch"
       return 1
     fi
@@ -494,23 +498,51 @@ worker_process_task() {
   if [ "$uncommitted" -gt 0 ]; then
     _wlog_task "$task" "Committing $uncommitted files..."
     _stage_safely
-    gt modify "${GT_MODIFY_ARGS[@]}" -m "$commit_msg" 2>/dev/null || {
-      _wlog_task "$task" "ERROR: gt modify failed"
-      queue_mark_blocked "$task" "Graphite modify failed"
+    # Try Graphite first, fall back to plain git commit
+    if command -v gt >/dev/null 2>&1 && gt modify "${GT_MODIFY_ARGS[@]}" -m "$commit_msg" 2>/dev/null; then
+      _wlog_task "$task" "Changes committed via Graphite"
+    elif git commit -m "$commit_msg" 2>/dev/null; then
+      _wlog_task "$task" "Changes committed via git"
+    else
+      _wlog_task "$task" "ERROR: Failed to commit changes"
+      queue_mark_blocked "$task" "Commit failed"
       return 1
-    }
+    fi
   fi
 
-  # Submit PR
+  # Submit PR - try Graphite first, fall back to GitHub CLI
   _wlog_task "$task" "Submitting PR..."
   local pr_out pr_code pr_num
+  local current_branch
+  current_branch="$(git branch --show-current)"
+
+  # Push changes first (needed for gh pr create)
+  git push -u origin "$current_branch" 2>/dev/null || git push origin "$current_branch" 2>/dev/null || true
+
   set +e
-  pr_out="$(gt submit "${GT_SUBMIT_ARGS[@]}" 2>&1)"
-  pr_code=$?
+  if command -v gt >/dev/null 2>&1; then
+    pr_out="$(gt submit "${GT_SUBMIT_ARGS[@]}" 2>&1)"
+    pr_code=$?
+    if [ "$pr_code" -eq 0 ]; then
+      _wlog_task "$task" "PR submitted via Graphite"
+    fi
+  else
+    pr_code=1  # Force fallback to gh
+  fi
+
+  # Fallback to GitHub CLI
+  if [ "$pr_code" -ne 0 ]; then
+    _wlog_task "$task" "Trying GitHub CLI fallback..."
+    pr_out="$(gh pr create --draft --title "[$task] $title" --body "Auto-generated PR for $task" 2>&1)"
+    pr_code=$?
+    if [ "$pr_code" -eq 0 ]; then
+      _wlog_task "$task" "PR submitted via GitHub CLI"
+    fi
+  fi
   set -e
 
   if [ "$pr_code" -ne 0 ]; then
-    _wlog_task "$task" "ERROR: gt submit failed"
+    _wlog_task "$task" "ERROR: PR submission failed"
     queue_mark_blocked "$task" "PR submission failed: $(echo "$pr_out" | tail -50 | tr '\n' ' ')"
     return 1
   fi

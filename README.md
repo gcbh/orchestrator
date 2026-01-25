@@ -1,4 +1,4 @@
-# Orchestrator v3.0
+# Orchestrator
 
 Unified Cursor+Beads+Graphite agent loop with:
 - **Clean Reviewer Agent**: Fresh-eyes code review by a separate model
@@ -82,7 +82,9 @@ export CLAUDE_CODE_ARGS="--dangerously-skip-permissions"
 orchestrator-v3.0/
 ├── bin/
 │   ├── orchestrator-loop.sh   # Main orchestrator loop
-│   └── fe-agent-loop.sh       # Frontend wrapper
+│   ├── fe-agent-loop.sh       # Frontend wrapper
+│   ├── swarm-loop.sh          # Swarm entry point ← NEW
+│   └── swarm-monitor.sh       # Swarm monitoring ← NEW
 ├── lib/orchestrator/
 │   ├── actions.sh             # Step implementations
 │   ├── beads.sh               # Beads helpers
@@ -91,9 +93,13 @@ orchestrator-v3.0/
 │   ├── failure_classifier.sh  # LLM failure classification
 │   ├── graphite.sh            # Graphite helpers
 │   ├── reconcile.sh           # Idempotency/reconciliation
-│   ├── reviewer_agent.sh      # Clean reviewer agent ← NEW
-│   ├── validation_pipeline.sh # Multi-stage validation ← NEW
-│   └── worktree_manager.sh    # Git worktree management ← NEW
+│   ├── reviewer_agent.sh      # Clean reviewer agent
+│   ├── swarm_coordinator.sh   # Swarm coordinator ← NEW
+│   ├── swarm_lock.sh          # Per-task locking ← NEW
+│   ├── swarm_queue.sh         # Task distribution ← NEW
+│   ├── swarm_worker.sh        # Worker implementation ← NEW
+│   ├── validation_pipeline.sh # Multi-stage validation
+│   └── worktree_manager.sh    # Git worktree management
 ├── rules/
 │   ├── agent-guidelines.mdc   # Agent behavior rules
 │   ├── agent-debugging.mdc    # Debugging guide
@@ -102,7 +108,7 @@ orchestrator-v3.0/
 └── README.md                  # This file
 ```
 
-## New in v3.0
+## Features
 
 ### Clean Reviewer Agent
 A separate AI model reviews changes with fresh eyes after implementation:
@@ -131,22 +137,112 @@ Efficient git worktree management:
 - Automatic Husky disabling
 - Easy cleanup
 
+### Swarm Orchestrator
+Run multiple Claude Code agents in parallel:
+- N parallel workers, each in isolated worktrees
+- Automatic Graphite initialization in worktrees
+- Staggered starts to avoid rate limits
+- Task claiming with epic affinity
+- Graceful shutdown with lock cleanup
+
+## Swarm Usage
+
+### Prerequisites
+
+The swarm orchestrator works with the following optional dependencies:
+
+| Tool | Required | Purpose | Fallback |
+|------|----------|---------|----------|
+| [Beads](https://github.com/beads-ai/beads-cli) | **Yes** | Task queue | None |
+| [Graphite](https://graphite.dev/cli) | Optional | Branch stacking, PRs | Plain git + gh |
+| [GitHub CLI](https://cli.github.com/) | Optional | PR creation fallback | None (Graphite required) |
+
+**Note**: You need either Graphite OR GitHub CLI for PR creation. The swarm will automatically use Graphite if available, otherwise falls back to `gh pr create`.
+
+### Quick Start
+
+```bash
+# Start a swarm with 3 workers
+./bin/swarm-loop.sh --size 3 --main-repo /path/to/repo --flavor be
+
+# Monitor the swarm
+./bin/swarm-monitor.sh
+
+# Or with environment variables
+SWARM_SIZE=3 MAIN_REPO=/path/to/repo ORCH_FLAVOR=ios ./bin/swarm-loop.sh
+```
+
+### Swarm Configuration
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `SWARM_SIZE` | `3` | Number of parallel workers (1-10) |
+| `SWARM_STAGGER_DELAY` | `30` | Seconds between worker starts |
+| `SWARM_EPIC_SERIALIZE` | `0` | Serialize tasks within same epic |
+| `SWARM_EPIC_AFFINITY` | `1` | Prefer tasks from same epic |
+| `VALIDATE_CMD` | auto | Override validation command |
+
+### Flavor Presets
+
+| Flavor | Validation Command |
+|--------|-------------------|
+| `fe` | `pnpm run typecheck` |
+| `be` | `make fmt` |
+| `ios` | `make build` |
+
+### Swarm Architecture
+
+```
+┌─────────────────────────────────────────────────────┐
+│                   SWARM COORDINATOR                  │
+├─────────────────────────────────────────────────────┤
+│  - Rate limit management (staggered starts)          │
+│  - Worker lifecycle management                       │
+│  - Graphite auto-initialization in worktrees         │
+│  - Graceful shutdown on Ctrl+C                       │
+└───────────────┬─────────────────────────────────────┘
+                │
+      ┌─────────┼─────────┐
+      ▼         ▼         ▼
+┌──────────┐ ┌──────────┐ ┌──────────┐
+│ WORKER 0 │ │ WORKER 1 │ │ WORKER N │
+│ wt: /0   │ │ wt: /1   │ │ wt: /N   │
+└────┬─────┘ └────┬─────┘ └────┬─────┘
+     └────────────┼────────────┘
+                  ▼
+         ┌──────────────┐
+         │ BEADS (bd)   │
+         │ Task Queue   │
+         └──────────────┘
+```
+
 ## Changelog
 
-### v3.0 (2026-01-04)
+See [GitHub Releases](https://github.com/geoffwhittington/orchestrator/releases) for full release history.
+
+### v7.1 (2026-01-25)
+- Automatic Graphite initialization in worktrees
+- Fallback to plain git + GitHub CLI when Graphite unavailable
+- Per-project lock directories for running multiple swarms
+- Updated documentation for plug-and-play setup
+
+### v7.0 (2026-01-25)
+- Added swarm orchestrator for parallel agent execution
+- Added swarm monitoring tool (`swarm-monitor.sh`)
+- N parallel workers with isolated worktrees
+- Staggered starts and task claiming with epic affinity
+
+### v6.1
 - Added clean reviewer agent (`reviewer_agent.sh`)
 - Added validation pipeline (`validation_pipeline.sh`)
 - Added CLI adapter for Cursor/Claude Code swapping
 - Added worktree manager for per-epic worktrees
-- Fixed temp branch handling for locked base branches
-- Improved self-healing and sync logic
 
-### v2.1 (2025-12-22)
-- Added self-healing infrastructure
-- Fixed jq parsing for Beads JSON
-- Improved Graphite tracking
-
-### v2.0 (2025-12-20)
+### v5.0
 - State machine architecture
 - LLM failure classification
 - Idempotent operations
+
+### v4.0
+- Initial Beads + Graphite integration
+- Self-healing infrastructure

@@ -201,18 +201,35 @@ _setup_worker_worktree() {
     git fetch origin --quiet 2>/dev/null || true
 
     # Try main first, then master (suppress all output)
+    local trunk_branch="main"
     if git worktree add "$wt_path" origin/main --detach >/dev/null 2>&1; then
       _clog "Worktree created from origin/main"
+      trunk_branch="main"
     elif git worktree add "$wt_path" origin/master --detach >/dev/null 2>&1; then
       _clog "Worktree created from origin/master"
+      trunk_branch="master"
     else
       _clog "ERROR: Failed to create worktree for worker $worker_id"
       # Fall back to using the main repo directly
       printf '%s' "$MAIN_REPO"
       return 0
     fi
+
+    # Initialize Graphite in the worktree (use new 'gt init' command, fall back to old 'gt repo init')
+    if command -v gt >/dev/null 2>&1; then
+      (cd "$wt_path" && gt init --trunk "$trunk_branch" >/dev/null 2>&1) || \
+      (cd "$wt_path" && gt repo init --trunk "$trunk_branch" >/dev/null 2>&1) || true
+      _clog "Graphite initialized in worktree"
+    fi
   else
     _clog "Worktree already exists for worker $worker_id"
+    # Ensure Graphite is initialized even for existing worktrees
+    if command -v gt >/dev/null 2>&1 && [ -d "$wt_path" ]; then
+      (cd "$wt_path" && gt init --trunk main >/dev/null 2>&1) || \
+      (cd "$wt_path" && gt repo init --trunk main >/dev/null 2>&1) || \
+      (cd "$wt_path" && gt init --trunk master >/dev/null 2>&1) || \
+      (cd "$wt_path" && gt repo init --trunk master >/dev/null 2>&1) || true
+    fi
   fi
 
   printf '%s' "$wt_path"
