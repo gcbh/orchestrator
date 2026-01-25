@@ -39,6 +39,18 @@ log "Installing lib modules..."
 cp "$SCRIPT_DIR/lib/orchestrator/"*.sh ~/.local/lib/orchestrator/
 chmod +x ~/.local/lib/orchestrator/*.sh
 
+# Install Claude Code skills (optional)
+if [ -d "$SCRIPT_DIR/skills" ]; then
+  log "Installing Claude Code skills..."
+  mkdir -p ~/.claude/skills
+  for skill_dir in "$SCRIPT_DIR/skills"/*/; do
+    skill_name=$(basename "$skill_dir")
+    mkdir -p ~/.claude/skills/"$skill_name"
+    cp -r "$skill_dir"* ~/.claude/skills/"$skill_name"/
+    log "  Installed skill: $skill_name"
+  done
+fi
+
 # Install rules (optional)
 if [ -d "$SCRIPT_DIR/rules" ]; then
   log "Installing rules..."

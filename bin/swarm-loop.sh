@@ -80,7 +80,8 @@ _configure_flavor() {
       ;;
 
     ios|mobile)
-      VALIDATE_CMD="${VALIDATE_CMD:-xcodebuild build -scheme \${XCODE_SCHEME:-App} -configuration Debug -destination 'platform=iOS Simulator,name=iPhone 15'}"
+      # Swift Package Manager projects use make build; Xcode projects use xcodebuild
+      VALIDATE_CMD="${VALIDATE_CMD:-make build}"
       if command -v xcrun >/dev/null 2>&1; then
         export DEVELOPER_DIR="$(xcode-select -p)"
       fi
