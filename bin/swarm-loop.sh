@@ -38,8 +38,14 @@ AGENT_CLI="${AGENT_CLI:-auto}"
 # Validation (auto-configured per flavor)
 VALIDATE_CMD="${VALIDATE_CMD:-}"
 
-# Lock settings
-SWARM_LOCK_DIR="${SWARM_LOCK_DIR:-/tmp/swarm-locks}"
+# Lock settings - use project-specific lock directory
+_get_project_lock_dir() {
+  local repo="${MAIN_REPO:-/tmp}"
+  local project_name
+  project_name="$(basename "$repo")"
+  echo "/tmp/swarm-locks-${project_name}"
+}
+SWARM_LOCK_DIR="${SWARM_LOCK_DIR:-$(_get_project_lock_dir)}"
 SWARM_LOCK_TTL_SECS="${SWARM_LOCK_TTL_SECS:-3600}"
 SWARM_EPIC_SERIALIZE="${SWARM_EPIC_SERIALIZE:-0}"
 SWARM_EPIC_AFFINITY="${SWARM_EPIC_AFFINITY:-1}"

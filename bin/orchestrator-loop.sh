@@ -24,6 +24,7 @@ set -uo pipefail  # Removed -e to allow agent recovery to handle errors
 # CONFIG
 # ──────────────────────────────────────────────────────────────────────────────
 ORCH_FLAVOR="${ORCH_FLAVOR:-be}"          # fe|be
+ORCH_IDENTITY="${ORCH_IDENTITY:-$ORCH_FLAVOR}"  # Messaging identity (e.g., ios, backend)
 
 IMPLEMENTER_MODEL="${IMPLEMENTER_MODEL:-opus-4.5-thinking}"
 CHECKER_MODEL="${CHECKER_MODEL:-gemini-3-flash}"
@@ -53,6 +54,11 @@ fi
 # Source self-healing module for automatic recovery
 if [ -f "$LIB_DIR/self_healing.sh" ]; then
   source "$LIB_DIR/self_healing.sh"
+fi
+
+# Source cross-repo messaging for multi-orchestrator communication
+if [ -f "$LIB_DIR/cross_repo_messaging.sh" ]; then
+  source "$LIB_DIR/cross_repo_messaging.sh"
 fi
 
 # MAIN_REPO: where bd runs (canonical checkout)
@@ -867,7 +873,20 @@ if [ "$preflight_result" -eq 2 ]; then
   sleep $((SLEEP_SECS * 10))
 fi
 
+# Initialize cross-repo messaging if available
+if type msg_init >/dev/null 2>&1; then
+  log "Initializing cross-repo messaging as '$ORCH_IDENTITY'..."
+  msg_init "$ORCH_IDENTITY" || log "WARN: messaging init failed (continuing without)"
+fi
+
 while true; do
+  # Check for cross-repo messages (unblocks waiting tasks, shows broadcasts)
+  if type msg_check_inbox >/dev/null 2>&1; then
+    cd "$MAIN_REPO"
+    msg_check_inbox 2>/dev/null || true
+    msg_check_broadcasts 2>/dev/null || true
+  fi
+
   # Periodic sync check
   if needs_sync; then
     log "Periodic sync triggered (interval: ${SYNC_INTERVAL_SECS}s)"

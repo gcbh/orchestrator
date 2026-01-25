@@ -233,7 +233,7 @@ REVIEW CHECKLIST:
 2. Are there any obvious bugs or logic errors?
 3. Is error handling adequate?
 4. Are there any security concerns?
-5. Does the code follow the project's patterns?
+5. Does the code follow the project patterns?
 6. Should there be unit tests for this change?
 
 OUTPUT FORMAT:
@@ -494,7 +494,7 @@ $error_msg
 
 INSTRUCTIONS:
 1. Read the error messages carefully
-2. Fix ONLY the errors shown - don't change unrelated code
+2. Fix ONLY the errors shown - do not change unrelated code
 3. After fixing, the validation will run again
 
 Do NOT run any commands - just fix the code.
