@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.orchestrator.swarm.{{PROJECT_NAME}}</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>{{ORCHESTRATOR_PATH}}/bin/swarm-loop.sh</string>
+        <string>--main-repo</string>
+        <string>{{MAIN_REPO}}</string>
+        <string>--flavor</string>
+        <string>{{FLAVOR}}</string>
+        <string>--size</string>
+        <string>{{SWARM_SIZE}}</string>
+    </array>
+
+    <key>WorkingDirectory</key>
+    <string>{{ORCHESTRATOR_PATH}}</string>
+
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>PATH</key>
+        <string>/usr/local/bin:/usr/bin:/bin:/opt/homebrew/bin:{{HOME}}/.local/bin</string>
+        <key>HOME</key>
+        <string>{{HOME}}</string>
+        <key>IMPLEMENTER_MODEL</key>
+        <string>opus-4.5-thinking</string>
+    </dict>
+
+    <key>StandardOutPath</key>
+    <string>/tmp/swarm-{{PROJECT_NAME}}.log</string>
+
+    <key>StandardErrorPath</key>
+    <string>/tmp/swarm-{{PROJECT_NAME}}.log</string>
+
+    <key>RunAtLoad</key>
+    <false/>
+
+    <key>KeepAlive</key>
+    <dict>
+        <key>SuccessfulExit</key>
+        <false/>
+    </dict>
+
+    <key>ThrottleInterval</key>
+    <integer>60</integer>
+
+    <key>ProcessType</key>
+    <string>Background</string>
+
+    <key>Nice</key>
+    <integer>10</integer>
+</dict>
+</plist>

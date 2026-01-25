@@ -79,12 +79,16 @@ export CLAUDE_CODE_ARGS="--dangerously-skip-permissions"
 ## Files
 
 ```
-orchestrator-v3.0/
+orchestrator/
 ├── bin/
 │   ├── orchestrator-loop.sh   # Main orchestrator loop
 │   ├── fe-agent-loop.sh       # Frontend wrapper
-│   ├── swarm-loop.sh          # Swarm entry point ← NEW
-│   └── swarm-monitor.sh       # Swarm monitoring ← NEW
+│   ├── swarm-loop.sh          # Swarm entry point
+│   ├── swarm-dev.sh           # Development mode (tmux)
+│   ├── swarm-install.sh       # launchd service installer
+│   └── swarm-monitor.sh       # Swarm monitoring
+├── launchd/
+│   └── com.orchestrator.swarm.plist.template  # Service template
 ├── lib/orchestrator/
 │   ├── actions.sh             # Step implementations
 │   ├── beads.sh               # Beads helpers
@@ -162,14 +166,53 @@ The swarm orchestrator works with the following optional dependencies:
 ### Quick Start
 
 ```bash
-# Start a swarm with 3 workers
-./bin/swarm-loop.sh --size 3 --main-repo /path/to/repo --flavor be
+# Development: Run in tmux with monitoring
+./bin/swarm-dev.sh -r /path/to/repo -f ios
 
-# Monitor the swarm
+# Production: Install as launchd service
+./bin/swarm-install.sh -p ios -r /path/to/repo -f ios -s 3
+launchctl start com.orchestrator.swarm.ios
+
+# Monitor any running swarm
 ./bin/swarm-monitor.sh
+```
 
-# Or with environment variables
-SWARM_SIZE=3 MAIN_REPO=/path/to/repo ORCH_FLAVOR=ios ./bin/swarm-loop.sh
+### Deployment Modes
+
+#### Development Mode (tmux)
+Best for testing and debugging. Runs in a tmux session with split panes for logs and monitoring.
+
+```bash
+# Start swarm in tmux
+./bin/swarm-dev.sh -r /path/to/repo -f ios
+
+# Attach to running session
+./bin/swarm-dev.sh --attach ios
+
+# Stop session
+./bin/swarm-dev.sh --stop ios
+
+# Run in foreground (no tmux)
+./bin/swarm-dev.sh -r /path/to/repo -f ios --fg
+```
+
+#### Production Mode (launchd)
+Best for long-running swarms. Installs as a macOS background service.
+
+```bash
+# Install service
+./bin/swarm-install.sh -p ios -r /path/to/repo -f ios -s 3
+
+# Service management
+launchctl start com.orchestrator.swarm.ios
+launchctl stop com.orchestrator.swarm.ios
+launchctl unload ~/Library/LaunchAgents/com.orchestrator.swarm.ios.plist
+
+# Check status
+./bin/swarm-install.sh --status
+
+# Uninstall
+./bin/swarm-install.sh --uninstall -p ios
 ```
 
 ### Swarm Configuration
