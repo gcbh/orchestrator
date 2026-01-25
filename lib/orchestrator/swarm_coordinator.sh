@@ -58,7 +58,8 @@ LIB_DIR="${LIB_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)}"
 
 _clog() {
   local msg="$(date '+%Y-%m-%d %H:%M:%S') [coordinator] $*"
-  echo "$msg" | tee -a "$COORDINATOR_LOG_FILE"
+  echo "$msg" >> "$COORDINATOR_LOG_FILE"
+  echo "$msg" >&2
 }
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -178,37 +179,43 @@ _load_state() {
 
 # Setup worktree for a worker
 # Usage: _setup_worker_worktree <worker_id>
-# Outputs: path to worktree
+# Outputs: path to worktree (ONLY the path, nothing else)
 _setup_worker_worktree() {
   local worker_id="$1"
+  local project_name
+  project_name="$(basename "$MAIN_REPO")"
+  local wt_base="$HOME/.local/worktrees/${project_name}"
+  local wt_path="${wt_base}/worker-${worker_id}"
 
-  case "$SWARM_WORKTREE_MODE" in
-    per-worker)
-      # Each worker gets its own worktree
-      if type wt_get_epic_worktree >/dev/null 2>&1; then
-        wt_get_epic_worktree "worker-$worker_id"
-      else
-        # Fallback: create worktree manually
-        local wt_path="$HOME/.local/worktrees/swarm/worker-$worker_id"
-        if [ ! -d "$wt_path" ]; then
-          cd "$MAIN_REPO"
-          git worktree add "$wt_path" origin/master --detach 2>/dev/null || \
-            git worktree add "$wt_path" origin/main --detach
-        fi
-        echo "$wt_path"
-      fi
-      ;;
+  # Always create per-worker worktrees to avoid git conflicts
+  if [ ! -d "$wt_path" ]; then
+    _clog "Creating worktree for worker $worker_id at $wt_path"
+    mkdir -p "$wt_base"
 
-    epic|shared)
-      # Workers share worktrees by epic
-      # Return main repo for now; worker will switch as needed
-      echo "$MAIN_REPO"
-      ;;
+    # Find the git root (handle case where MAIN_REPO is already a worktree)
+    local git_root
+    git_root="$(cd "$MAIN_REPO" && git rev-parse --git-common-dir 2>/dev/null)"
+    git_root="$(dirname "$git_root")"
 
-    *)
-      echo "$MAIN_REPO"
-      ;;
-  esac
+    cd "$git_root" 2>/dev/null || cd "$MAIN_REPO"
+    git fetch origin --quiet 2>/dev/null || true
+
+    # Try main first, then master (suppress all output)
+    if git worktree add "$wt_path" origin/main --detach >/dev/null 2>&1; then
+      _clog "Worktree created from origin/main"
+    elif git worktree add "$wt_path" origin/master --detach >/dev/null 2>&1; then
+      _clog "Worktree created from origin/master"
+    else
+      _clog "ERROR: Failed to create worktree for worker $worker_id"
+      # Fall back to using the main repo directly
+      printf '%s' "$MAIN_REPO"
+      return 0
+    fi
+  else
+    _clog "Worktree already exists for worker $worker_id"
+  fi
+
+  printf '%s' "$wt_path"
 }
 
 # ──────────────────────────────────────────────────────────────────────────────

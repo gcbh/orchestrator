@@ -68,9 +68,10 @@ EXEC_REPO="${EXEC_REPO:-$MAIN_REPO}"
 
 BASE_BRANCH="${BASE_BRANCH:-main}"
 
-LOCK_FILE="${LOCK_FILE:-/tmp/cursor-agent.lock}"
-CURRENT_TASK_FILE="${CURRENT_TASK_FILE:-/tmp/cursor-agent-current-task}"
-FAILED_TASKS_FILE="${FAILED_TASKS_FILE:-/tmp/cursor-agent-failed-tasks}"
+# Use ORCH_IDENTITY in file paths to allow parallel orchestrators
+LOCK_FILE="${LOCK_FILE:-/tmp/cursor-agent-${ORCH_IDENTITY}.lock}"
+CURRENT_TASK_FILE="${CURRENT_TASK_FILE:-/tmp/cursor-agent-${ORCH_IDENTITY}-current-task}"
+FAILED_TASKS_FILE="${FAILED_TASKS_FILE:-/tmp/cursor-agent-${ORCH_IDENTITY}-failed-tasks}"
 
 LOCK_TTL_SECS="${LOCK_TTL_SECS:-3600}"
 SLEEP_SECS="${SLEEP_SECS:-120}"
