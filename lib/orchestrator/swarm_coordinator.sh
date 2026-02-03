@@ -259,7 +259,9 @@ _spawn_worker() {
   export BASE_BRANCH
   export LIB_DIR
   export SWARM_LOCK_DIR
-  export WORKER_LOG_FILE="/tmp/swarm-worker-${worker_id}.log"
+  local project_name
+  project_name="$(basename "$MAIN_REPO")"
+  export WORKER_LOG_FILE="/tmp/swarm-${project_name}-worker-${worker_id}.log"
 
   # Spawn worker in background
   bash "$LIB_DIR/swarm_worker.sh" \

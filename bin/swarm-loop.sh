@@ -38,14 +38,15 @@ AGENT_CLI="${AGENT_CLI:-auto}"
 # Validation (auto-configured per flavor)
 VALIDATE_CMD="${VALIDATE_CMD:-}"
 
-# Lock settings - use project-specific lock directory
+# Lock settings - project-specific lock directory (set after arg parsing)
 _get_project_lock_dir() {
   local repo="${MAIN_REPO:-/tmp}"
   local project_name
   project_name="$(basename "$repo")"
   echo "/tmp/swarm-locks-${project_name}"
 }
-SWARM_LOCK_DIR="${SWARM_LOCK_DIR:-$(_get_project_lock_dir)}"
+# Note: SWARM_LOCK_DIR is set in main() after MAIN_REPO is known
+SWARM_LOCK_DIR="${SWARM_LOCK_DIR:-}"
 SWARM_LOCK_TTL_SECS="${SWARM_LOCK_TTL_SECS:-3600}"
 SWARM_EPIC_SERIALIZE="${SWARM_EPIC_SERIALIZE:-0}"
 SWARM_EPIC_AFFINITY="${SWARM_EPIC_AFFINITY:-1}"
@@ -273,6 +274,12 @@ main() {
         ;;
     esac
   done
+
+  # Set project-specific lock directory now that MAIN_REPO is known
+  if [ -z "$SWARM_LOCK_DIR" ]; then
+    SWARM_LOCK_DIR="$(_get_project_lock_dir)"
+  fi
+  export SWARM_LOCK_DIR
 
   # Configure flavor-specific settings
   _configure_flavor

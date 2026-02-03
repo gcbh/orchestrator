@@ -421,9 +421,10 @@ worker_process_task() {
 
     _wlog_task "$task" "Creating branch $desired_branch from $parent_branch"
 
-    # Checkout parent
+    # Checkout parent (use detached HEAD as fallback for worktree compatibility)
     gt checkout "$parent_branch" --no-interactive 2>/dev/null || \
       git checkout "$parent_branch" 2>/dev/null || \
+      git checkout "origin/$parent_branch" --detach 2>/dev/null || \
       { _wlog_task "$task" "ERROR: Cannot checkout $parent_branch"; return 1; }
 
     git pull origin "$parent_branch" --rebase 2>/dev/null || true
