@@ -61,6 +61,11 @@ if [ -f "$LIB_DIR/cross_repo_messaging.sh" ]; then
   source "$LIB_DIR/cross_repo_messaging.sh"
 fi
 
+# Source trace collector for meta-harness optimization
+if [ -f "$LIB_DIR/trace_collector.sh" ]; then
+  source "$LIB_DIR/trace_collector.sh"
+fi
+
 # MAIN_REPO: where bd runs (canonical checkout)
 # EXEC_REPO: where code+gt runs (worktree is fine; can equal MAIN_REPO)
 MAIN_REPO="${MAIN_REPO:-${BACKEND_REPO_PATH:-/home/ubuntu/workspaces/experiment-framework}}"
@@ -958,6 +963,12 @@ while true; do
   EPIC_ID="$(get_epic_id "$TASK" 6)"
   log "DEBUG: Epic ID is: ${EPIC_ID:-none}"
 
+  # Initialize execution trace for this task run
+  if type trace_init >/dev/null 2>&1; then
+    trace_init "$TASK" "${EPIC_ID:-}"
+    trace_event "pick_task" "start" "task=$TASK epic=${EPIC_ID:-none}"
+  fi
+
   # Branch context selection
   BRANCH_MODE="new"
   EXISTING_BRANCH=""
@@ -1143,6 +1154,11 @@ while true; do
   log "DEBUG: About to call: run_agent_with_retries \"$IMPLEMENTER_MODEL\" \"<prompt>\""
   log "DEBUG: [BEFORE COMMAND SUBSTITUTION]"
 
+  # Trace: record implementation start
+  type trace_event >/dev/null 2>&1 && trace_event "implement" "start" "model=$IMPLEMENTER_MODEL"
+  local _impl_start_ts
+  _impl_start_ts="$(date +%s)"
+
   # Try to call it directly without command substitution first
   log "DEBUG: Testing direct call..."
   run_agent_with_retries "$IMPLEMENTER_MODEL" "$PROMPT" > /tmp/agent-output.txt 2>&1 || true
@@ -1151,6 +1167,12 @@ while true; do
 
   log "DEBUG: [AFTER COMMAND SUBSTITUTION]"
   log "DEBUG: Agent returned, output length: ${#OUT} characters"
+
+  # Trace: record implementation result
+  if type trace_agent_call >/dev/null 2>&1; then
+    local _impl_duration=$(( $(date +%s) - _impl_start_ts ))
+    trace_agent_call "implementer" "$IMPLEMENTER_MODEL" "$PROMPT" "$OUT" "0" "$_impl_duration"
+  fi
 
   if agent_reported_blocked "$OUT"; then
     bd_update_blocked "$TASK" "$(echo "$OUT" | tail -120 | tr '\n' ' ' | sed 's/  */ /g')"
@@ -1172,15 +1194,25 @@ while true; do
 
   # Post-change validation
   log "Post-change validation gate..."
+  local _val_start_ts
+  _val_start_ts="$(date +%s)"
   if ! run_validate 2>&1 | tee /tmp/orch-validate.log; then
     tailmsg="$(tail -180 /tmp/orch-validate.log | tr '\n' ' ' | sed 's/  */ /g')"
+    # Trace: record validation failure
+    if type trace_validation >/dev/null 2>&1; then
+      trace_validation "post_validate" "fail" "$tailmsg" "$(( $(date +%s) - _val_start_ts ))"
+      trace_failure "validate_post" "VALIDATION_FAILURE" "STASH_AND_BLOCK" "$tailmsg"
+    fi
     git stash push -m "validate-failed-$TASK-$(date +%Y%m%d-%H%M%S)" >/dev/null 2>&1 || true
     bd_update_blocked "$TASK" "Post-change validation failed. Changes stashed. Tail: $tailmsg"
+    type trace_finalize >/dev/null 2>&1 && trace_finalize "validation_failed" "" "post-change validation"
     rm -f "$CURRENT_TASK_FILE" "$LOCK_FILE"
     maybe_close_epics || true
     sleep "$SLEEP_SECS"
     continue
   fi
+  # Trace: record validation success
+  type trace_validation >/dev/null 2>&1 && trace_validation "post_validate" "pass" "" "$(( $(date +%s) - _val_start_ts ))"
 
   # ═══════════════════════════════════════════════════════════════════════════
   # CLEAN REVIEWER AGENT - Fresh eyes review by a different model
@@ -1202,7 +1234,10 @@ while true; do
         
         # Run the clean reviewer
         REVIEW_RESULT="$(run_reviewer_agent "$TASK" "$TITLE" "HEAD~1" 2>/dev/null || echo '{"approved":false,"error":"reviewer failed"}')"
-        
+
+        # Trace: record review result
+        type trace_review >/dev/null 2>&1 && trace_review "$REVIEW_RESULT" "$review_attempt"
+
         # Check if approved
         if echo "$REVIEW_RESULT" | grep -q '"approved":\s*true'; then
           log "REVIEWER APPROVED ✓ (attempt $review_attempt)"
@@ -1295,6 +1330,9 @@ EOF
       complete="$(echo "$CHECK_JSON" | jq -r '.complete // false')"
       conf="$(echo "$CHECK_JSON" | jq -r '.confidence // 0')"
     fi
+
+    # Trace: record initial checker result
+    type trace_checker >/dev/null 2>&1 && trace_checker "$CHECK_JSON" "1"
 
     repair_attempts=0
     while :; do
@@ -1421,8 +1459,12 @@ EOF
   if [ -n "${PR_NUM:-}" ]; then
     bd_close "$TASK" "Completed in PR #$PR_NUM"
     clear_fail "$TASK"
+    # Trace: record successful completion
+    type trace_finalize >/dev/null 2>&1 && trace_finalize "success" "$PR_NUM"
   else
     bd_update_blocked "$TASK" "PR submitted but PR number not captured. Tail: $(echo "$PR_OUT" | tail -80 | tr '\n' ' ' | sed 's/  */ /g')"
+    # Trace: record partial success (PR submitted but number not captured)
+    type trace_finalize >/dev/null 2>&1 && trace_finalize "pr_number_missing" "" "PR submitted but number not captured"
   fi
 
   rm -f "$CURRENT_TASK_FILE" "$LOCK_FILE"

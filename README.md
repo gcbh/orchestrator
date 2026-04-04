@@ -7,6 +7,7 @@ Unified Cursor+Beads+Graphite agent loop with:
 - **Worktree Manager**: Per-epic git worktrees with shared node_modules
 - **Self-Healing**: Automatic sync and recovery from infrastructure failures
 - **Epic-based Stacking**: Branches organized as `epic/<EPIC_ID>/<TASK_ID>-<slug>`
+- **Meta-Harness Optimization**: Structured trace collection and automated harness self-improvement (inspired by [Meta-Harness](https://arxiv.org/abs/2603.28052))
 
 ## Quick Start
 
@@ -258,6 +259,46 @@ launchctl unload ~/Library/LaunchAgents/com.orchestrator.swarm.ios.plist
          │ Task Queue   │
          └──────────────┘
 ```
+
+## Meta-Harness Optimization
+
+Inspired by [Meta-Harness: End-to-End Optimization of Model Harnesses](https://arxiv.org/abs/2603.28052) (Lee et al., 2026), the orchestrator can now collect structured execution traces and use them to self-optimize its configuration.
+
+### How It Works
+
+1. **Trace Collection**: Every task run records structured traces — agent prompts/outputs, validation results, reviewer verdicts, checker scores, failure classifications, and timing data — into a per-task filesystem at `~/.local/share/orchestrator/traces/`.
+
+2. **Meta-Analysis**: The `meta-harness.sh` tool computes aggregate statistics from traces: success rates, failure class distributions, average durations.
+
+3. **Agentic Proposer**: A coding agent reads the trace filesystem (up to thousands of files across past runs) and proposes concrete configuration changes — model selection, confidence thresholds, review depth, retry settings — with explicit credit assignment tracing each proposal back to specific trace evidence.
+
+4. **Safe Adoption**: Proposed changes are validated against an allowlist of safe configuration keys and output as sourceable shell scripts.
+
+### Usage
+
+```bash
+# View performance stats from collected traces
+./bin/meta-harness.sh stats
+
+# Run an optimization cycle (requires 10+ traces)
+./bin/meta-harness.sh optimize
+
+# View the latest proposal
+./bin/meta-harness.sh report
+
+# Apply a proposal to your environment
+source ~/.local/share/orchestrator/meta-harness/candidates/<id>/apply.sh
+```
+
+### Configuration
+
+| Variable | Default | Purpose |
+|----------|---------|---------|
+| `TRACE_ENABLED` | `1` | Enable/disable trace collection |
+| `TRACE_ROOT` | `~/.local/share/orchestrator/traces` | Trace storage directory |
+| `MH_PROPOSER_MODEL` | `opus-4.5-thinking` | Model for the proposer agent |
+| `MH_MIN_TRACES` | `10` | Minimum traces before proposing |
+| `MH_ADOPTION_THRESHOLD` | `5` | Min improvement (%) to adopt |
 
 ## Changelog
 
