@@ -468,9 +468,15 @@ mh_generate_config_patch() {
       done
 
       if [ "$is_safe" = "true" ]; then
-        echo "# $rationale"
-        echo "export ${key}=\"${value}\""
-        echo ""
+        # Sanitize value to prevent shell injection when sourced
+        # Only allow alphanumeric, hyphens, underscores, dots, slashes, and spaces
+        if printf '%s' "$value" | grep -qE '[`$"\\!;&|(){}<>]'; then
+          echo "# SKIPPED (unsafe characters in value): $key"
+        else
+          echo "# $rationale"
+          echo "export ${key}=\"${value}\""
+          echo ""
+        fi
       else
         echo "# SKIPPED (not in safe keys): $key=$value"
       fi

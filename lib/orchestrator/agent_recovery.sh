@@ -29,7 +29,7 @@ run_with_recovery() {
     local output
     local exit_code
     
-    if output=$(eval "$command" 2>&1); then
+    if output=$(bash -c "$command" 2>&1); then
       exit_code=0
     else
       exit_code=$?
@@ -165,8 +165,13 @@ agent_with_recovery() {
   local description="$1"
   local model="$2"
   local prompt="$3"
-  
-  local agent_command="run_agent_cli '$model' '$prompt'"
-  run_with_recovery "$description" "$agent_command" "Agent invocation"
+
+  # Export model/prompt as env vars to avoid shell quoting issues
+  export _RECOVERY_MODEL="$model"
+  export _RECOVERY_PROMPT="$prompt"
+  run_with_recovery "$description" 'run_agent_cli "$_RECOVERY_MODEL" "$_RECOVERY_PROMPT"' "Agent invocation"
+  local rc=$?
+  unset _RECOVERY_MODEL _RECOVERY_PROMPT
+  return $rc
 }
 

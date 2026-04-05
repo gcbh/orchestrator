@@ -112,10 +112,10 @@ for runtime, devices in data.get('devices', {}).items():
   # Find a simulator matching our device/OS preference
   local found_udid
   found_udid=$(xcrun simctl list devices -j 2>/dev/null | \
-    python3 -c "
-import json, sys
-device_name = '$IOS_SIMULATOR_DEVICE'
-os_version = '$IOS_SIMULATOR_OS'
+    IOS_SIM_DEVICE="$IOS_SIMULATOR_DEVICE" IOS_SIM_OS="$IOS_SIMULATOR_OS" python3 -c "
+import json, sys, os
+device_name = os.environ.get('IOS_SIM_DEVICE', '')
+os_version = os.environ.get('IOS_SIM_OS', '')
 data = json.load(sys.stdin)
 for runtime, devices in data.get('devices', {}).items():
     if os_version in runtime:
@@ -654,8 +654,8 @@ ios_sim_find_element() {
   ui_json=$(ios_sim_describe_ui "$udid" 2>/dev/null)
 
   # Parse JSON to find element with matching label and return center coordinates
-  echo "$ui_json" | python3 -c "
-import json, sys
+  echo "$ui_json" | IOS_SIM_LABEL="$label" python3 -c "
+import json, sys, os
 def find_element(elements, label):
     for el in elements if isinstance(elements, list) else [elements]:
         if el.get('AXLabel') == label:
@@ -672,7 +672,7 @@ def find_element(elements, label):
 
 try:
     data = json.load(sys.stdin)
-    find_element(data, '$label')
+    find_element(data, os.environ.get('IOS_SIM_LABEL', ''))
 except:
     pass
 " 2>/dev/null

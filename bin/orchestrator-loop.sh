@@ -498,7 +498,7 @@ epic_remote_refs_any() {
   local epic="$1"
   local e; e="$(sanitize_id_for_branch "$epic")"
   git fetch origin --quiet || true
-  git for-each-ref --format='%(refname:short)' "refs/remotes/origin/epic/$e/" 2>/dev/null | head -1 | grep -q . || true
+  git for-each-ref --format='%(refname:short)' "refs/remotes/origin/epic/$e/" 2>/dev/null | head -1 | grep -q .
 }
 
 # Find existing branch for a task under epic prefix
@@ -1156,7 +1156,6 @@ while true; do
 
   # Trace: record implementation start
   type trace_event >/dev/null 2>&1 && trace_event "implement" "start" "model=$IMPLEMENTER_MODEL"
-  local _impl_start_ts
   _impl_start_ts="$(date +%s)"
 
   # Try to call it directly without command substitution first
@@ -1170,7 +1169,7 @@ while true; do
 
   # Trace: record implementation result
   if type trace_agent_call >/dev/null 2>&1; then
-    local _impl_duration=$(( $(date +%s) - _impl_start_ts ))
+    _impl_duration=$(( $(date +%s) - _impl_start_ts ))
     trace_agent_call "implementer" "$IMPLEMENTER_MODEL" "$PROMPT" "$OUT" "0" "$_impl_duration"
   fi
 
@@ -1194,7 +1193,6 @@ while true; do
 
   # Post-change validation
   log "Post-change validation gate..."
-  local _val_start_ts
   _val_start_ts="$(date +%s)"
   if ! run_validate 2>&1 | tee /tmp/orch-validate.log; then
     tailmsg="$(tail -180 /tmp/orch-validate.log | tr '\n' ' ' | sed 's/  */ /g')"
@@ -1315,8 +1313,9 @@ EOF
 
   # Optional checker + bounded repair
   if [ "$ENABLE_CHECKER" = "1" ]; then
-    diffstat="$(git diff --stat || true)"
-    diff_full="$(git diff || true)"
+    # Use HEAD~1 to show committed changes (git diff alone shows nothing after commit)
+    diffstat="$(git diff --stat HEAD~1 2>/dev/null || git diff --stat || true)"
+    diff_full="$(git diff HEAD~1 2>/dev/null || git diff || true)"
     diff_head="$(echo "$diff_full" | head -1200)"
     diff_tail="$(echo "$diff_full" | tail -400)"
     difftext="${diff_head}"$'\n...\n'"${diff_tail}"

@@ -156,20 +156,32 @@ trap _handle_shutdown SIGTERM SIGINT
 # STATE PERSISTENCE
 # ──────────────────────────────────────────────────────────────────────────────
 
+_COORDINATOR_STARTED_AT="${_COORDINATOR_STARTED_AT:-$(date +%s)}"
+
 _save_state() {
   cat > "$COORDINATOR_STATE_FILE" <<EOF
 coordinator_pid=$$
 swarm_size=$SWARM_SIZE
 workers_started=$WORKERS_STARTED
 workers_died=$WORKERS_DIED
-started_at=$(date +%s)
+started_at=$_COORDINATOR_STARTED_AT
 last_update=$(date +%s)
 EOF
 }
 
 _load_state() {
   if [ -f "$COORDINATOR_STATE_FILE" ]; then
-    source "$COORDINATOR_STATE_FILE"
+    # Parse key=value safely instead of sourcing to prevent code execution
+    while IFS='=' read -r key value; do
+      case "$key" in
+        coordinator_pid|swarm_size|workers_started|workers_died|started_at|last_update)
+          # Only allow known keys with numeric values
+          if [[ "$value" =~ ^[0-9]+$ ]]; then
+            eval "$key=$value"
+          fi
+          ;;
+      esac
+    done < "$COORDINATOR_STATE_FILE"
   fi
 }
 
@@ -341,8 +353,10 @@ _check_rate_limits() {
   # Look for rate limit indicators in recent worker logs
   local rate_limit_found=false
 
+  local project_name
+  project_name="$(basename "$MAIN_REPO")"
   for i in $(seq 0 $((SWARM_SIZE - 1))); do
-    local log="/tmp/swarm-worker-${i}.log"
+    local log="/tmp/swarm-${project_name}-worker-${i}.log"
     if [ -f "$log" ]; then
       # Check last 50 lines for rate limit errors
       if tail -50 "$log" 2>/dev/null | grep -qi "rate limit\|429\|overloaded"; then
