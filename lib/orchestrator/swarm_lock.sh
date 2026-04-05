@@ -110,20 +110,13 @@ task_lock_acquire() {
   fi
 
   # Atomic creation using mkdir (atomic on POSIX)
-  local temp_dir="${lock_file}.d.$$"
-  if mkdir "$temp_dir" 2>/dev/null; then
+  # Use a FIXED directory name so only one process can succeed
+  local mutex_dir="${lock_file}.d"
+  if mkdir "$mutex_dir" 2>/dev/null; then
     # We got the atomic lock, write our claim
     echo "$$:$worker_id:$(date +%s)" > "$lock_file"
-    rmdir "$temp_dir"
-
-    # Double-check we actually own it (race condition protection)
-    local owner
-    owner="$(head -1 "$lock_file" 2>/dev/null | cut -d: -f1 || echo "")"
-    if [ "$owner" = "$$" ]; then
-      return 0  # Successfully acquired
-    else
-      return 1  # Lost race
-    fi
+    rmdir "$mutex_dir"
+    return 0  # Successfully acquired
   fi
 
   return 1  # Failed to acquire
@@ -204,15 +197,12 @@ epic_lock_acquire() {
     return 1
   fi
 
-  # Atomic creation
-  local temp_dir="${lock_file}.d.$$"
-  if mkdir "$temp_dir" 2>/dev/null; then
+  # Atomic creation using fixed directory name as mutex
+  local mutex_dir="${lock_file}.d"
+  if mkdir "$mutex_dir" 2>/dev/null; then
     echo "$$:$worker_id:$(date +%s)" > "$lock_file"
-    rmdir "$temp_dir"
-
-    local owner
-    owner="$(head -1 "$lock_file" 2>/dev/null | cut -d: -f1 || echo "")"
-    [ "$owner" = "$$" ]
+    rmdir "$mutex_dir"
+    return 0
   else
     return 1
   fi
@@ -276,14 +266,12 @@ coordinator_lock_acquire() {
     return 1
   fi
 
-  local temp_dir="${lock_file}.d.$$"
-  if mkdir "$temp_dir" 2>/dev/null; then
+  # Atomic creation using fixed directory name as mutex
+  local mutex_dir="${lock_file}.d"
+  if mkdir "$mutex_dir" 2>/dev/null; then
     echo "$$:coordinator:$(date +%s)" > "$lock_file"
-    rmdir "$temp_dir"
-
-    local owner
-    owner="$(head -1 "$lock_file" 2>/dev/null | cut -d: -f1 || echo "")"
-    [ "$owner" = "$$" ]
+    rmdir "$mutex_dir"
+    return 0
   else
     return 1
   fi
